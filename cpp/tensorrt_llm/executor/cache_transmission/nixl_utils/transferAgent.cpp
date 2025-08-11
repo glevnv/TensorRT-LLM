@@ -531,10 +531,10 @@ void NixlLoopbackAgent::deregisterFiles(FileDescs const& descs)
 std::unique_ptr<TransferStatus> NixlLoopbackAgent::submitLoopbackRequests(
     MemoryDescs const& memoryDescs, FileDescs const& filedescs, bool isOffload)
 {
-    nixl_xfer_dlist_t dram_seg = NixlHelper::convertXferDist(memoryDescs);
+    nixl_xfer_dlist_t vram_seg = NixlHelper::convertXferDist(memoryDescs);
     nixl_xfer_dlist_t file_seg = NixlHelper::convertXferDist(filedescs);
-    nixl_xfer_dlist_t& src = isOffload ? dram_seg : file_seg;
-    nixl_xfer_dlist_t& dst = isOffload ? file_seg : dram_seg;
+    nixl_xfer_dlist_t& src = isOffload ? vram_seg : file_seg;
+    nixl_xfer_dlist_t& dst = isOffload ? file_seg : vram_seg;
     nixl_xfer_op_t op = isOffload ? NIXL_WRITE : NIXL_READ;
     nixlXferReqH* handle = nullptr;
 
