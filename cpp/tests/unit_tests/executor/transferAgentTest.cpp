@@ -383,14 +383,17 @@ TEST_P(LoopbackAgentTest, Basic)
 
     TLLM_CHECK(loopbackAgent);
 
-    MemoryDesc memDesc(std::vector<char>(100, 1));
-    MemoryDescs memDescs{MemoryType::kVRAM, {memDesc}};
+    std::vector<char> memory(100, 1);
+    char* cuda_mem;
+    cudaMalloc(&cuda_mem, 100);
+    cudaMemcpy(cuda_mem, memory.data(), 100, cudaMemcpyHostToDevice);
 
     std::vector<FileDesc> fileDescVec;
     fileDescVec.emplace_back(getDirectory() + "/basic_test.bin", O_CREAT | O_RDWR, 0664, 100);
     std::vector<char> fileData(100, 10);
     write(fileDescVec[0].getFd(), fileData.data(), fileData.size());
 
+    MemoryDescs memDescs{MemoryType::kVRAM, {MemoryDesc{cuda_mem, 100, 0}}};
     FileDescs fileDescs{fileDescVec};
 
     loopbackAgent->registerMemory(memDescs);
@@ -399,11 +402,10 @@ TEST_P(LoopbackAgentTest, Basic)
     auto status = loopbackAgent->submitLoopbackRequests(memDescs, fileDescs, false);
     status->wait();
 
-    std::vector<char> memory(100, 1);
-    cudaMemcpy(memory.data(), memDescs.getDescs()[0].getAddr(), 100, cudaMemcpyDeviceToHost);
+    cudaMemcpy(memory.data(), cuda_mem, 100, cudaMemcpyDeviceToHost);
 
     TLLM_CHECK(memory == fileData);
-    cudaFree(memDescs.getDescs()[0].getAddr());
+    cudaFree(cuda_mem);
 
     loopbackAgent->deregisterMemory(memDescs);
     loopbackAgent->deregisterFiles(fileDescs);
