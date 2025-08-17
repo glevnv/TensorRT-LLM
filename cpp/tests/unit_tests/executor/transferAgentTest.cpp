@@ -351,13 +351,18 @@ public:
     void SetUp() override
     {
         auto dirPath = fs::absolute("test_loopback_agent_tmp");
-        fs::create_directories(dirPath);
+        std::error_code ec;
+        fs::create_directories(dirPath, ec);
+        TLLM_CHECK_WITH_INFO(!ec, "Failed to create test directory: %s", ec.message().c_str());
         mDirectory = dirPath.string();
     }
 
     void TearDown() override
     {
-        fs::remove_all(mDirectory);
+        std::error_code ec;
+        fs::remove_all(mDirectory, ec);
+        if (ec)
+            std::cerr << "Warning: Failed to clean up test directory: " << ec.message() << std::endl;
     }
 
     [[nodiscard]] std::unique_ptr<BaseLoopbackAgent> makeLoopbackAgent(BaseAgentConfig const& config)
@@ -384,13 +389,14 @@ TEST_P(LoopbackAgentTest, Basic)
 
     std::vector<char> memory(100, 1);
     char* cuda_mem;
-    cudaMalloc(&cuda_mem, 100);
+    TLLM_CUDA_CHECK(cudaMalloc(&cuda_mem, 100));
     cudaMemcpy(cuda_mem, memory.data(), 100, cudaMemcpyHostToDevice);
 
     std::vector<FileDesc> fileDescVec;
     fileDescVec.emplace_back(getDirectory() + "/basic_test.bin", O_CREAT | O_RDWR, 0664, 100);
     std::vector<char> fileData(100, 10);
-    write(fileDescVec[0].getFd(), fileData.data(), fileData.size());
+    ssize_t bytesWritten = write(fileDescVec[0].getFd(), fileData.data(), fileData.size());
+    TLLM_CHECK_WITH_INFO(bytesWritten == fileData.size(), "Failed to write to file");
 
     MemoryDescs memDescs{MemoryType::kVRAM, {MemoryDesc{cuda_mem, 100, 0}}};
     FileDescs fileDescs{fileDescVec};
@@ -404,7 +410,7 @@ TEST_P(LoopbackAgentTest, Basic)
     cudaMemcpy(memory.data(), cuda_mem, 100, cudaMemcpyDeviceToHost);
 
     TLLM_CHECK(memory == fileData);
-    cudaFree(cuda_mem);
+    TLLM_CUDA_CHECK(cudaFree(cuda_mem));
 
     loopbackAgent->deregisterMemory(memDescs);
     loopbackAgent->deregisterFiles(fileDescs);
@@ -434,7 +440,8 @@ TEST_P(LoopbackAgentTest, Basic2)
     status->wait();
 
     std::vector<char> fileData(100);
-    read(fileDescs.getDescs()[0].getFd(), fileData.data(), fileData.size());
+    ssize_t bytesRead = read(fileDescs.getDescs()[0].getFd(), fileData.data(), fileData.size());
+    TLLM_CHECK_WITH_INFO(bytesRead == fileData.size(), "Failed to read from file");
 
     TLLM_CHECK(fileData == memory);
 
